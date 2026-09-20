@@ -1,0 +1,13 @@
+{
+  "name": "dayan-gemini-proxy",
+  "version": "1.0.0",
+  "description": "Transparent ultra-lightweight Gemini API reverse proxy on Vercel (pinned to iad1 US East)",
+  "type": "module",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "keywords": ["gemini", "proxy", "vercel", "dayan"],
+  "author": "corlin",
+  "license": "MIT"
+}
