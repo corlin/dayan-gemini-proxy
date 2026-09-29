@@ -7,6 +7,9 @@ export const SUPPORTED_MODELS = [
   'gemini-2.5-flash-image',
 ];
 
+export const MAX_BODY_BYTES = 15 * 1024 * 1024; // 15 MB
+export const DEFAULT_TIMEOUT_MS = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '50000', 10);
+
 export function extractApiKey(req) {
   const authHeader = req.headers?.authorization || req.headers?.Authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -174,8 +177,20 @@ export async function handleImageGeneration(req, res, rawBody = null) {
     } else if (typeof rawBody === 'string') {
       body = JSON.parse(rawBody);
     } else {
+      let totalBytes = 0;
       const chunks = [];
       for await (const chunk of req) {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_BODY_BYTES) {
+          return res.status(413).json({
+            error: {
+              message: 'Payload Too Large: maximum allowed body size is 15MB',
+              type: 'invalid_request_error',
+              param: null,
+              code: 'payload_too_large',
+            },
+          });
+        }
         chunks.push(chunk);
       }
       const rawText = Buffer.concat(chunks).toString('utf8');
@@ -218,6 +233,7 @@ export async function handleImageGeneration(req, res, rawBody = null) {
         'x-goog-api-key': apiKey,
       },
       body: JSON.stringify(geminiPayload),
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     });
 
     const responseJson = await upstreamRes.json().catch(() => ({}));
@@ -231,6 +247,17 @@ export async function handleImageGeneration(req, res, rawBody = null) {
     return res.status(200).json(openAIResponse);
   } catch (err) {
     console.error('Image generation upstream error:', err);
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+      return res.status(504).json({
+        error: {
+          message: `Gateway Timeout: upstream Google Gemini did not respond within ${DEFAULT_TIMEOUT_MS / 1000}s`,
+          type: 'api_error',
+          param: null,
+          code: 'gateway_timeout',
+        },
+      });
+    }
+
     return res.status(502).json({
       error: {
         message: err?.message || 'Failed to communicate with Google Gemini API',

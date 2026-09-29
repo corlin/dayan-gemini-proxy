@@ -1,15 +1,23 @@
 # dayan-gemini-proxy
 
-Ultra-lightweight, zero-dependency transparent Google Gemini API reverse proxy hosted on Vercel, with built-in **OpenAI-compatible Text-to-Image (文生图)** support and **Interactive API Documentation**.
+Ultra-lightweight, zero-dependency transparent Google Gemini API reverse proxy hosted on Vercel, with built-in **OpenAI-compatible Text-to-Image (文生图)** support, **Interactive API Documentation**, and **Real-time Performance Metrics & Request Logging**.
 
 - **Production Endpoint**: [https://llm.hidear.app](https://llm.hidear.app)
 - **Interactive API Docs (Scalar)**: [https://llm.hidear.app/docs](https://llm.hidear.app/docs)
+- **Live Performance & Logs Monitor**: [https://llm.hidear.app/stats](https://llm.hidear.app/stats)
 - **OpenAPI 3.1 Spec**: [https://llm.hidear.app/openapi.json](https://llm.hidear.app/openapi.json)
 
 ## Features
 - **Zero Configuration**: Transparent pass-through of all headers, query parameters, and request bodies. No API keys stored in the proxy.
 - **US East Locked (`iad1`)**: Pinned to Washington D.C. (`iad1`) in `vercel.json` to completely bypass Google AI Studio region restrictions (`User location is not supported for the API use`).
 - **Interactive API Documentation (`/docs`)**: Built-in Scalar interactive sandbox for browsing schemas, testing API requests in real-time, and copying code snippets in Python, Node.js, cURL, and Go.
+- **Live Metrics Dashboard & Request Logging (`/stats`)**: Built-in in-memory Ring Buffer monitor tracking uptime, total requests, success/error rates, latency, model breakdown, and recent masked request traces.
+- **Enterprise-grade Robustness**:
+  - **Timeout Protection**: AbortSignal timeout (default 50s, configurable via `UPSTREAM_TIMEOUT_MS`) returning standard `504 Gateway Timeout` instead of hanging.
+  - **Payload Size Guard**: Blocks oversized request bodies (>15MB) to protect against memory exhaustion (`413 Payload Too Large`).
+  - **Client Abort Cleanup**: Automatically tears down upstream fetch streams when clients disconnect prematurely.
+  - **Sensitive Data Masking**: All logs and metric views strictly mask API keys (e.g. `AQ.Ab8...txRw`) and client IPs (`192.168.1.***`).
+  - **Optional Admin Protection**: Secure `/stats` by setting `STATS_SECRET` in environment variables.
 - **OpenAI-Compatible Image Generation (`/v1/images/generations`)**: Native support for OpenAI image generation request/response format, mapped directly to Google Gemini's native image models (`gemini-3.1-flash-image` / Nano Banana 2).
 - **Adaptive Image Output**: Returns both Base64 (`b64_json`) and Data URLs (`data:image/png;base64,...`) for universal compatibility with OpenAI SDKs and third-party WebUIs (NextChat, LobeChat, Chatbox, Dify, etc.).
 - **Streaming Support**: Full Server-Sent Events (SSE) streaming support via `stream.pipe()`.
@@ -22,7 +30,7 @@ Ultra-lightweight, zero-dependency transparent Google Gemini API reverse proxy h
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcorlin%2Fdayan-gemini-proxy)
 
 1. Click the button above or import `corlin/dayan-gemini-proxy` in your Vercel Dashboard.
-2. Deploy without needing any environment variables.
+2. Deploy without needing any environment variables (or optionally add `STATS_SECRET=your_admin_secret`).
 3. Configure your custom domain (e.g. `llm.hidear.app`).
 
 ---
@@ -134,6 +142,14 @@ curl -X POST "https://llm.hidear.app/v1beta/models/gemini-3.1-flash-image:genera
 
 ---
 
+### 3. Live Monitoring & Stats (`GET /stats`)
+
+- **Web Dashboard**: Open `https://llm.hidear.app/stats` in any browser for real-time visual charts and log traces.
+- **JSON View**: Query `https://llm.hidear.app/stats?format=json` or pass `Accept: application/json`.
+- **Admin Authentication**: If `STATS_SECRET` is set in Vercel environment variables, authenticate with `?token=YOUR_SECRET` or header `x-admin-token: YOUR_SECRET`.
+
+---
+
 ## Quota & Billing Notice
 
 > [!NOTE]
@@ -144,7 +160,7 @@ curl -X POST "https://llm.hidear.app/v1beta/models/gemini-3.1-flash-image:genera
 ## Testing
 
 ```bash
-# Run unit & mock test suite (19 tests)
+# Run unit & mock test suite (28 tests)
 npm test
 
 # Run E2E test suite against local proxy server (accepts optional API key)

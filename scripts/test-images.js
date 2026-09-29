@@ -68,6 +68,24 @@ server.listen(0, async () => {
     console.log(`✔ /openapi.json serves valid OpenAPI 3.1.0 with ${Object.keys(openApiData.paths).length} endpoints\n`);
 
     // -------------------------------------------------------------------------
+    // Test 1c: Live Monitor & Stats (/stats)
+    // -------------------------------------------------------------------------
+    console.log('[Test 1c] Verifying /stats Monitor Dashboard & JSON API...');
+    const statsHtmlRes = await fetch(`${baseUrl}/stats`, { headers: { accept: 'text/html' } });
+    const statsHtml = await statsHtmlRes.text();
+    if (statsHtmlRes.status !== 200 || !statsHtml.includes('Dayan Gemini Proxy Monitor')) {
+      throw new Error('Failed to load /stats HTML dashboard');
+    }
+    console.log('✔ /stats serves live monitoring dashboard HTML');
+
+    const statsJsonRes = await fetch(`${baseUrl}/stats?format=json`);
+    const statsJson = await statsJsonRes.json();
+    if (statsJsonRes.status !== 200 || !statsJson.stats?.statusCodes) {
+      throw new Error('Failed to load /stats JSON data');
+    }
+    console.log(`✔ /stats returns JSON metrics: Total=${statsJson.stats.totalRequests}, SuccessRate=${statsJson.stats.successRate}\n`);
+
+    // -------------------------------------------------------------------------
     // Test 2: OpenAI Missing Auth Check
     // -------------------------------------------------------------------------
     console.log('[Test 2] OpenAI Route Authentication Enforcement...');

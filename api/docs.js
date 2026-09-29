@@ -245,11 +245,45 @@ Internally maps requests to Google Gemini native image models (such as \`gemini-
                       target: { type: 'string', example: 'https://generativelanguage.googleapis.com' },
                       region: { type: 'string', example: 'iad1' },
                       features: { type: 'array', items: { type: 'string' } },
+                      docs: { type: 'string', example: 'https://llm.hidear.app/docs' },
+                      stats: { type: 'string', example: 'https://llm.hidear.app/stats' },
+                      openapi: { type: 'string', example: 'https://llm.hidear.app/openapi.json' },
                       timestamp: { type: 'string', example: '2026-09-29T02:00:00.000Z' },
                     },
                   },
                 },
               },
+            },
+          },
+        },
+      },
+      '/stats': {
+        get: {
+          tags: ['System'],
+          summary: 'Live Performance Metrics & Request Logs',
+          description: 'Returns real-time proxy performance metrics (uptime, request counts, error rates, model breakdown, and recent request logs). Browsers receive an interactive HTML dashboard; API clients receive structured JSON. Protected by STATS_SECRET when configured.',
+          parameters: [
+            {
+              name: 'token',
+              in: 'query',
+              required: false,
+              description: 'Administration token (matches STATS_SECRET if configured)',
+              schema: { type: 'string' },
+            },
+            {
+              name: 'format',
+              in: 'query',
+              required: false,
+              description: 'Set to "json" to force JSON output in browser',
+              schema: { type: 'string', enum: ['json', 'html'] },
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Metrics response (HTML dashboard or JSON object)',
+            },
+            '403': {
+              description: 'Forbidden: Invalid or missing administration token',
             },
           },
         },
