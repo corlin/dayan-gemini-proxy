@@ -74,10 +74,22 @@ Internally maps requests to Google Gemini native image models (such as \`gemini-
                     },
                     size: {
                       type: 'string',
-                      description: 'Image resolution / aspect ratio. Automatically mapped to Gemini imageConfig.aspectRatio.',
+                      description: 'Legacy canvas size, mapped to aspect ratio only. Use image_size and aspect_ratio for exact Gemini controls.',
                       enum: ['1024x1024', '1024x1792', '1792x1024', '1024x1365', '1365x1024', '512x512'],
                       default: '1024x1024',
                       example: '1024x1024',
+                    },
+                    image_size: {
+                      type: 'string',
+                      description: 'Native Gemini resolution tier. Defaults to 1K.',
+                      enum: ['1K', '2K', '4K'],
+                      default: '1K',
+                    },
+                    aspect_ratio: {
+                      type: 'string',
+                      description: 'Native Gemini aspect ratio. Overrides the ratio implied by size.',
+                      enum: ['1:1', '16:9', '9:16', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '21:9', '1:4', '4:1', '1:8', '8:1'],
+                      default: '1:1',
                     },
                     n: {
                       type: 'integer',

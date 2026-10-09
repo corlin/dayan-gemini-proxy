@@ -64,6 +64,20 @@ test('validateAndParseRequest accepts valid gemini image model', () => {
   assert.equal(parsed.model, 'gemini-3.1-flash-image');
   assert.equal(parsed.prompt, 'a cute cat');
   assert.equal(parsed.aspectRatio, '9:16');
+  assert.equal(parsed.imageSize, '1K');
+});
+
+test('image size and aspect ratio are validated and forwarded independently', () => {
+  const parsed = validateAndParseRequest({
+    prompt: 'a bouquet', model: 'gemini-3.1-flash-image', image_size: '4K', aspect_ratio: '1:4'
+  });
+  assert.equal(parsed.imageSize, '4K');
+  assert.equal(parsed.aspectRatio, '1:4');
+  assert.deepEqual(mapOpenAIToGeminiPayload(parsed).generationConfig.imageConfig, {
+    aspectRatio: '1:4', imageSize: '4K'
+  });
+  assert.throws(() => validateAndParseRequest({ prompt: 'a', model: 'gemini-3.1-flash-image', image_size: '8K' }), /image_size/);
+  assert.throws(() => validateAndParseRequest({ prompt: 'a', model: 'gemini-3.1-flash-image', aspect_ratio: '3:1' }), /aspect_ratio/);
 });
 
 test('mapOpenAIToGeminiPayload generates correct Gemini structure', () => {
@@ -81,7 +95,8 @@ test('mapOpenAIToGeminiPayload generates correct Gemini structure', () => {
     generationConfig: {
       responseModalities: ['IMAGE'],
       imageConfig: {
-        aspectRatio: '16:9'
+        aspectRatio: '16:9',
+        imageSize: '1K'
       }
     }
   });
@@ -108,6 +123,12 @@ test('mapGeminiToOpenAIResponse converts inlineData to OpenAI format', () => {
   const openAIRes = mapGeminiToOpenAIResponse(geminiData);
   assert.equal(typeof openAIRes.created, 'number');
   assert.equal(openAIRes.data.length, 1);
+  assert.equal(openAIRes.data[0].width, 1);
+  assert.equal(openAIRes.data[0].height, 1);
+  assert.throws(() => mapGeminiToOpenAIResponse(geminiData, '2K'), /below requested 2K/);
+  const compact = mapGeminiToOpenAIResponse(geminiData, '1K', 'b64_json');
+  assert.equal(compact.data[0].url, undefined);
+  assert.ok(compact.data[0].b64_json);
   assert.equal(openAIRes.data[0].b64_json, geminiData.candidates[0].content.parts[0].inlineData.data);
   assert.equal(openAIRes.data[0].url, `data:image/png;base64,${geminiData.candidates[0].content.parts[0].inlineData.data}`);
 });

@@ -19,7 +19,7 @@ Ultra-lightweight, zero-dependency transparent Google Gemini API reverse proxy h
   - **Sensitive Data Masking**: All logs and metric views strictly mask API keys (e.g. `AQ.Ab8...txRw`) and client IPs (`192.168.1.***`).
   - **Optional Admin Protection**: Secure `/stats` by setting `STATS_SECRET` in environment variables.
 - **OpenAI-Compatible Image Generation (`/v1/images/generations`)**: Native support for OpenAI image generation request/response format, mapped directly to Google Gemini's native image models (`gemini-3.1-flash-image` / Nano Banana 2).
-- **Adaptive Image Output**: Returns both Base64 (`b64_json`) and Data URLs (`data:image/png;base64,...`) for universal compatibility with OpenAI SDKs and third-party WebUIs (NextChat, LobeChat, Chatbox, Dify, etc.).
+- **Adaptive Image Output**: Returns Base64 (`b64_json`) and a Data URL by default. `response_format: "b64_json"` omits the duplicate Data URL for smaller responses.
 - **Streaming Support**: Full Server-Sent Events (SSE) streaming support via `stream.pipe()`.
 - **CORS Enabled**: Out-of-the-box preflight and cross-origin headers for universal client compatibility.
 
@@ -48,6 +48,8 @@ This endpoint allows any OpenAI-compatible client or SDK to generate images usin
 - `gemini-2.5-flash-image` (Nano Banana)
 
 #### Size & Aspect Ratio Mapping
+- Use `image_size: "1K" | "2K" | "4K"` and `aspect_ratio` for native Gemini image controls. Default is `1K` and `1:1`.
+- The legacy `size` field selects only a ratio. High-resolution responses include measured `width` and `height`; a lower-resolution image is rejected.
 - `1024x1024` / `512x512` -> `1:1`
 - `1024x1792` / `768x1344` -> `9:16`
 - `1792x1024` / `1344x768` -> `16:9`

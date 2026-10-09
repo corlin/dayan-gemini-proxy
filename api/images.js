@@ -9,6 +9,8 @@ export const SUPPORTED_MODELS = [
 
 export const MAX_BODY_BYTES = 15 * 1024 * 1024; // 15 MB
 export const DEFAULT_TIMEOUT_MS = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '50000', 10);
+export const IMAGE_SIZES = ['1K', '2K', '4K'];
+export const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '21:9', '1:4', '4:1', '1:8', '8:1'];
 
 export function extractApiKey(req) {
   const authHeader = req.headers?.authorization || req.headers?.Authorization;
@@ -51,7 +53,7 @@ export function validateAndParseRequest(body) {
     throw new Error('Invalid request body, JSON object expected');
   }
 
-  const { prompt, model, size, n = 1, response_format = 'url' } = body;
+  const { prompt, model, size, n = 1, response_format = 'url', image_size, aspect_ratio } = body;
 
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
     throw new Error("Missing required field: 'prompt' is required");
@@ -74,18 +76,22 @@ export function validateAndParseRequest(body) {
     );
   }
 
-  const aspectRatio = mapSizeToAspectRatio(size);
+  const aspectRatio = aspect_ratio ?? mapSizeToAspectRatio(size);
+  const imageSize = image_size ?? '1K';
+  if (!ASPECT_RATIOS.includes(aspectRatio)) throw new Error(`Unsupported aspect_ratio: ${aspectRatio}`);
+  if (!IMAGE_SIZES.includes(imageSize)) throw new Error(`Unsupported image_size: ${imageSize}`);
 
   return {
     model: trimmedModel,
     prompt: prompt.trim(),
     aspectRatio,
+    imageSize,
     n,
     responseFormat: response_format,
   };
 }
 
-export function mapOpenAIToGeminiPayload({ prompt, aspectRatio }) {
+export function mapOpenAIToGeminiPayload({ prompt, aspectRatio, imageSize = '1K' }) {
   return {
     contents: [
       {
@@ -97,12 +103,33 @@ export function mapOpenAIToGeminiPayload({ prompt, aspectRatio }) {
       responseModalities: ['IMAGE'],
       imageConfig: {
         aspectRatio,
+        imageSize,
       },
+      ...(imageSize === '1K' ? {} : { responseFormat: { image: { mimeType: 'IMAGE_JPEG' } } }),
     },
   };
 }
 
-export function mapGeminiToOpenAIResponse(geminiData) {
+export function imageDimensions(base64Data, mimeType) {
+  const bytes = Buffer.from(base64Data, 'base64');
+  if (mimeType === 'image/png' && bytes.length >= 24 && bytes.subarray(1, 4).toString() === 'PNG') {
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+  }
+  if (mimeType === 'image/jpeg' && bytes.length > 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] !== 0xff) break;
+      const marker = bytes[offset + 1];
+      const length = bytes.readUInt16BE(offset + 2);
+      if ([0xc0, 0xc1, 0xc2, 0xc3].includes(marker)) return { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) };
+      if (length < 2) break;
+      offset += length + 2;
+    }
+  }
+  return null;
+}
+
+export function mapGeminiToOpenAIResponse(geminiData, imageSize = '1K', responseFormat = 'url') {
   const parts = geminiData?.candidates?.[0]?.content?.parts || [];
   const imagePart = parts.find((p) => p.inlineData && p.inlineData.data);
 
@@ -111,6 +138,11 @@ export function mapGeminiToOpenAIResponse(geminiData) {
   }
 
   const { mimeType = 'image/png', data } = imagePart.inlineData;
+  const dimensions = imageDimensions(data, mimeType);
+  const minimumPixels = imageSize === '4K' ? 10_000_000 : imageSize === '2K' ? 2_500_000 : 0;
+  if (minimumPixels && (!dimensions || dimensions.width * dimensions.height < minimumPixels)) {
+    throw new Error(`Gemini returned an image below requested ${imageSize} resolution`);
+  }
   const dataUrl = `data:${mimeType};base64,${data}`;
 
   return {
@@ -118,7 +150,9 @@ export function mapGeminiToOpenAIResponse(geminiData) {
     data: [
       {
         b64_json: data,
-        url: dataUrl,
+        ...(responseFormat === 'b64_json' ? {} : { url: dataUrl }),
+        mime_type: mimeType,
+        ...(dimensions || {}),
       },
     ],
   };
@@ -221,8 +255,8 @@ export async function handleImageGeneration(req, res, rawBody = null) {
     });
   }
 
-  const { model, prompt, aspectRatio } = parsedParams;
-  const geminiPayload = mapOpenAIToGeminiPayload({ prompt, aspectRatio });
+  const { model, prompt, aspectRatio, imageSize, responseFormat } = parsedParams;
+  const geminiPayload = mapOpenAIToGeminiPayload({ prompt, aspectRatio, imageSize });
   const upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   try {
@@ -243,7 +277,7 @@ export async function handleImageGeneration(req, res, rawBody = null) {
       return res.status(translated.status).json(translated.body);
     }
 
-    const openAIResponse = mapGeminiToOpenAIResponse(responseJson);
+    const openAIResponse = mapGeminiToOpenAIResponse(responseJson, imageSize, responseFormat);
     return res.status(200).json(openAIResponse);
   } catch (err) {
     console.error('Image generation upstream error:', err);
