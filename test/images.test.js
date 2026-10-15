@@ -211,3 +211,25 @@ test('handler preserves CORS headers and handles OPTIONS for images endpoint', a
   assert.equal(headers['Access-Control-Allow-Origin'], '*');
   assert.equal(ended, true);
 });
+
+test('reference images are sent to Gemini as inline_data before the prompt', () => {
+  const parsed = validateAndParseRequest({
+    prompt: 'add peonies to this vase', model: 'gemini-3.1-flash-image',
+    image: ['data:image/jpeg;base64,AAAA', 'data:image/png;base64,BBBB'],
+  });
+  assert.deepEqual(mapOpenAIToGeminiPayload(parsed).contents[0].parts, [
+    { inline_data: { mime_type: 'image/jpeg', data: 'AAAA' } },
+    { inline_data: { mime_type: 'image/png', data: 'BBBB' } },
+    { text: 'add peonies to this vase' },
+  ]);
+  const alias = validateAndParseRequest({ prompt: 'p', model: 'gemini-3.1-flash-image', reference_image: 'data:image/webp;base64,CCCC' });
+  assert.deepEqual(alias.referenceImages, [{ mimeType: 'image/webp', data: 'CCCC' }]);
+  assert.deepEqual(validateAndParseRequest({ prompt: 'p', model: 'gemini-3.1-flash-image' }).referenceImages, []);
+});
+
+test('an unusable reference image is rejected instead of silently dropped', () => {
+  const base = { prompt: 'p', model: 'gemini-3.1-flash-image' };
+  assert.throws(() => validateAndParseRequest({ ...base, image: 'https://example.com/vase.jpg' }), /Reference image 1 must be a base64 data URL/);
+  assert.throws(() => validateAndParseRequest({ ...base, image: ['data:image/png;base64,AAAA', 42] }), /Reference image 2/);
+  assert.throws(() => validateAndParseRequest({ ...base, image: Array(7).fill('data:image/png;base64,AAAA') }), /at most 6/);
+});

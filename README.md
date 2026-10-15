@@ -50,6 +50,7 @@ This endpoint allows any OpenAI-compatible client or SDK to generate images usin
 #### Size & Aspect Ratio Mapping
 - Use `image_size: "1K" | "2K" | "4K"` and `aspect_ratio` for native Gemini image controls. Default is `1K` and `1:1`.
 - The legacy `size` field selects only a ratio. High-resolution responses include measured `width` and `height`; a lower-resolution image is rejected.
+- Optional `image` (alias `reference_image`): one base64 data URL or an array of up to 6, sent to Gemini as input images before the prompt (image-to-image, keeping a real object such as a vase unchanged, editing). A malformed reference returns `400` instead of being ignored.
 - `1024x1024` / `512x512` -> `1:1`
 - `1024x1792` / `768x1344` -> `9:16`
 - `1792x1024` / `1344x768` -> `16:9`

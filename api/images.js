@@ -10,6 +10,8 @@ export const SUPPORTED_MODELS = [
 export const MAX_BODY_BYTES = 15 * 1024 * 1024; // 15 MB
 export const DEFAULT_TIMEOUT_MS = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '50000', 10);
 export const IMAGE_SIZES = ['1K', '2K', '4K'];
+export const MAX_REFERENCE_IMAGES = 6;
+const REFERENCE_IMAGE = /^data:(image\/(?:png|jpeg|webp|heic|heif));base64,([A-Za-z0-9+/=]+)$/;
 export const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '21:9', '1:4', '4:1', '1:8', '8:1'];
 
 export function extractApiKey(req) {
@@ -48,6 +50,22 @@ export function mapSizeToAspectRatio(size) {
   return sizeMap[size.toLowerCase()] || '1:1';
 }
 
+/**
+ * Reference images for image-to-image / editing: `image` (or the alias `reference_image`) as one data URL or an array.
+ * Anything present but unusable is rejected, never silently dropped: a caller that sends a reference must get it used or an error.
+ */
+export function parseReferenceImages(body) {
+  const raw = body.image ?? body.reference_image;
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  if (list.length > MAX_REFERENCE_IMAGES) throw new Error(`Too many reference images: at most ${MAX_REFERENCE_IMAGES}`);
+  return list.map((item, i) => {
+    const m = typeof item === 'string' ? REFERENCE_IMAGE.exec(item.trim()) : null;
+    if (!m) throw new Error(`Reference image ${i + 1} must be a base64 data URL (data:image/png|jpeg|webp;base64,...)`);
+    return { mimeType: m[1], data: m[2] };
+  });
+}
+
 export function validateAndParseRequest(body) {
   if (!body || typeof body !== 'object') {
     throw new Error('Invalid request body, JSON object expected');
@@ -81,9 +99,12 @@ export function validateAndParseRequest(body) {
   if (!ASPECT_RATIOS.includes(aspectRatio)) throw new Error(`Unsupported aspect_ratio: ${aspectRatio}`);
   if (!IMAGE_SIZES.includes(imageSize)) throw new Error(`Unsupported image_size: ${imageSize}`);
 
+  const referenceImages = parseReferenceImages(body);
+
   return {
     model: trimmedModel,
     prompt: prompt.trim(),
+    referenceImages,
     aspectRatio,
     imageSize,
     n,
@@ -91,12 +112,16 @@ export function validateAndParseRequest(body) {
   };
 }
 
-export function mapOpenAIToGeminiPayload({ prompt, aspectRatio, imageSize = '1K' }) {
+export function mapOpenAIToGeminiPayload({ prompt, aspectRatio, imageSize = '1K', referenceImages = [] }) {
   return {
     contents: [
       {
         role: 'user',
-        parts: [{ text: prompt }],
+        // Reference images first, then the instruction (Gemini's recommended order for image editing)
+        parts: [
+          ...referenceImages.map(({ mimeType, data }) => ({ inline_data: { mime_type: mimeType, data } })),
+          { text: prompt },
+        ],
       },
     ],
     generationConfig: {
@@ -255,8 +280,8 @@ export async function handleImageGeneration(req, res, rawBody = null) {
     });
   }
 
-  const { model, prompt, aspectRatio, imageSize, responseFormat } = parsedParams;
-  const geminiPayload = mapOpenAIToGeminiPayload({ prompt, aspectRatio, imageSize });
+  const { model, prompt, aspectRatio, imageSize, responseFormat, referenceImages } = parsedParams;
+  const geminiPayload = mapOpenAIToGeminiPayload({ prompt, aspectRatio, imageSize, referenceImages });
   const upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   try {

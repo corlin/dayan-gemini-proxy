@@ -41,7 +41,7 @@ Ultra-lightweight Google Gemini API reverse proxy with native **OpenAI-compatibl
           tags: ['OpenAI Compatible'],
           summary: 'Text-to-Image Generation (OpenAI format)',
           description: `
-Generates images from a text prompt in OpenAI standard format. 
+Generates images from a text prompt, optionally guided by reference images (image), in OpenAI standard format. 
 
 Internally maps requests to Google Gemini native image models (such as \`gemini-3.1-flash-image\`) and returns both Base64 and Data URL. Compatible with OpenAI Python SDK, Node.js SDK, NextChat, LobeChat, Chatbox, and Dify.
           `.trim(),
@@ -90,6 +90,13 @@ Internally maps requests to Google Gemini native image models (such as \`gemini-
                       description: 'Native Gemini aspect ratio. Overrides the ratio implied by size.',
                       enum: ['1:1', '16:9', '9:16', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '21:9', '1:4', '4:1', '1:8', '8:1'],
                       default: '1:1',
+                    },
+                    image: {
+                      description: 'Optional reference image(s) for image-to-image or editing: one base64 data URL or an array of up to 6 (data:image/png|jpeg|webp;base64,...). Sent to Gemini before the prompt. `reference_image` is accepted as an alias. Invalid values are rejected with 400, never ignored.',
+                      oneOf: [
+                        { type: 'string', example: 'data:image/jpeg;base64,/9j/4AAQ...' },
+                        { type: 'array', items: { type: 'string' }, maxItems: 6 },
+                      ],
                     },
                     n: {
                       type: 'integer',
